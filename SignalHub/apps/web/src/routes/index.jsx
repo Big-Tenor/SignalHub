@@ -1,15 +1,24 @@
 import { createBrowserRouter } from 'react-router-dom'
 import HomePage from '../pages/HomePage'
+import MapPage from '../pages/MapPage'
 import ReportPage from '../pages/ReportPage'
 import ProfilePage from '../pages/ProfilePage'
 import LoginPage from '../pages/LoginPage'
-import RegisterPage from '../pages/RegisterPage'
 import ProtectedRoute from './ProtectedRoute'
+import RegisterPage from '../pages/RegisterPage'
 
-export const router = createBrowserRouter([
+const router = createBrowserRouter([
   {
     path: '/',
     element: <HomePage />,
+  },
+  {
+    path: '/map',
+    element: <MapPage />,
+  },
+  {
+    path: '/map',
+    element: <MapPage />,
   },
   {
     path: '/report',
@@ -36,3 +45,5 @@ export const router = createBrowserRouter([
     element: <RegisterPage />,
   },
 ])
+
+export default router;

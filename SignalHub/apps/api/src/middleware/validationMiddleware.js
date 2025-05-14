@@ -1,4 +1,55 @@
-import { check } from 'express-validator';
+import { check, param, query } from 'express-validator';
+
+export const validatePagination = [
+  query('page')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Numéro de page invalide'),
+  
+  query('limit')
+    .optional()
+    .isInt({ min: 1, max: 100 })
+    .withMessage('Limite par page invalide'),
+];
+
+export const validateLocationFilter = [
+  query('lat')
+    .optional()
+    .isFloat({ min: -90, max: 90 })
+    .withMessage('Latitude invalide'),
+  
+  query('lng')
+    .optional()
+    .isFloat({ min: -180, max: 180 })
+    .withMessage('Longitude invalide'),
+  
+  query('radius')
+    .optional()
+    .isFloat({ min: 0, max: 100 })
+    .withMessage('Rayon de recherche invalide (0-100km)'),
+];
+
+export const validateReportUpdate = [
+  param('id')
+    .isUUID()
+    .withMessage('ID de signalement invalide'),
+  
+  check('type')
+    .optional()
+    .isIn(['road', 'electricity', 'waste', 'water', 'other'])
+    .withMessage('Type de signalement invalide'),
+  
+  check('description')
+    .optional()
+    .trim()
+    .isLength({ min: 10, max: 500 })
+    .withMessage('La description doit contenir entre 10 et 500 caractères'),
+  
+  check('status')
+    .optional()
+    .isIn(['new', 'in_progress', 'resolved'])
+    .withMessage('Statut invalide'),
+];
 
 export const validateReport = [
   check('type')

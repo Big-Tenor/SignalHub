@@ -9,31 +9,88 @@ if (!API_URL) {
 
 const useReportStore = create((set, get) => ({
   reports: [],
+  total: 0,
+  page: 1,
+  limit: 10,
   loading: false,
   error: null,
   
-  // Récupérer tous les signalements
+  // État pour les filtres
+  filters: {
+    location: null,
+    type: null,
+    status: null,
+  },
+  
+  // Configurer les filtres
+  setFilters: (newFilters) => {
+    set((state) => ({
+      filters: { ...state.filters, ...newFilters },
+      page: 1 // Réinitialiser la pagination lors du changement de filtres
+    }))
+  },
+
+  // Réinitialiser les filtres
+  resetFilters: () => {
+    set({
+      filters: {
+        location: null,
+        type: null,
+        status: null,
+      },
+      page: 1
+    })
+  },
+
+  // Mettre à jour la pagination
+  setPage: (newPage) => set({ page: newPage }),
+  setLimit: (newLimit) => set({ limit: newLimit, page: 1 }),
+
+  // Récupérer tous les signalements avec pagination et filtres
   fetchReports: async () => {
+    const { page, limit, filters } = get()
     set({ loading: true, error: null })
+
     try {
-      const token = await getAccessToken();
-      const response = await fetch(`${API_URL}/reports`, {
-        credentials: 'same-origin',
+      let url = new URL(`${API_URL}/reports`)
+      
+      // Ajouter les paramètres de pagination
+      url.searchParams.append('page', page)
+      url.searchParams.append('limit', limit)
+      
+      // Ajouter les filtres
+      if (filters.location) {
+        url.searchParams.append('lat', filters.location.latitude)
+        url.searchParams.append('lng', filters.location.longitude)
+        url.searchParams.append('radius', filters.location.radius || 10)
+      }
+      if (filters.type) {
+        url.searchParams.append('type', filters.type)
+      }
+      if (filters.status) {
+        url.searchParams.append('status', filters.status)
+      }
+
+      const token = await getAccessToken()
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        },
-        mode: 'cors'
-      });
+        }
+      })
       
       if (!response.ok) {
-        throw new Error('Erreur lors de la récupération des signalements');
+        throw new Error('Erreur lors de la récupération des signalements')
       }
       
-      const data = await response.json();
-      // Conversion des données en instances de Report
-      const reports = data.map(reportData => Report.fromJSON(reportData));
-      set({ reports });
+      const data = await response.json()
+      const total = parseInt(response.headers.get('X-Total-Count') || '0')
+      
+      set({
+        reports: data.map(reportData => Report.fromJSON(reportData)),
+        total,
+        error: null
+      })
     } catch (error) {
       set({ error: error.message })
     } finally {
