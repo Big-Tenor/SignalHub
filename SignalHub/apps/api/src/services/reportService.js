@@ -3,13 +3,21 @@ import { Report } from '@repo/shared';
 
 class ReportService {
   async getAllReports() {
-    const { data, error } = await supabase
-      .from('reports')
-      .select('*')
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('reports')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    if (error) throw error;
-    return data.map(report => Report.fromJSON(report));
+      if (error) {
+        throw new Error(`Erreur lors de la récupération des signalements: ${error.message}`);
+      }
+      
+      return data.map(report => Report.fromJSON(report));
+    } catch (error) {
+      console.error('getAllReports error:', error);
+      throw error;
+    }
   }
 
   async getReportById(id) {

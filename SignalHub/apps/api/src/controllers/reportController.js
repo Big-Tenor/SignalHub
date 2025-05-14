@@ -26,7 +26,14 @@ export const createReport = async (req, res, next) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      return res.status(400).json({ 
+        status: 'error',
+        message: 'Validation échouée',
+        errors: errors.array().map(err => ({
+          field: err.param,
+          message: err.msg
+        }))
+      });
     }
 
     const report = await reportService.createReport(req.body, req.user.id);

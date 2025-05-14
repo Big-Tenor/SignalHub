@@ -23,49 +23,84 @@ export default class Report {
 
   static validateType(type) {
     const validTypes = ['road', 'electricity', 'waste', 'water', 'other'];
-    return validTypes.includes(type);
+    if (!validTypes.includes(type)) {
+      throw new Error(`Type de signalement invalide. Valeurs acceptées: ${validTypes.join(', ')}`);
+    }
+    return true;
   }
 
   static validateStatus(status) {
     const validStatuses = ['new', 'in_progress', 'resolved'];
-    return validStatuses.includes(status);
+    if (!validStatuses.includes(status)) {
+      throw new Error(`Statut invalide. Valeurs acceptées: ${validStatuses.join(', ')}`);
+    }
+    return true;
+  }
+
+  static validateDescription(description) {
+    if (!description || description.trim().length < 10) {
+      throw new Error('La description doit contenir au moins 10 caractères');
+    }
+    if (description.trim().length > 500) {
+      throw new Error('La description ne doit pas dépasser 500 caractères');
+    }
+    return true;
   }
 
   static validateCoordinates(latitude, longitude) {
-    return (
-      latitude >= -90 && 
-      latitude <= 90 && 
-      longitude >= -180 && 
-      longitude <= 180
-    );
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+      throw new Error('Les coordonnées doivent être des nombres');
+    }
+    
+    if (latitude < -90 || latitude > 90) {
+      throw new Error('La latitude doit être comprise entre -90 et 90');
+    }
+    
+    if (longitude < -180 || longitude > 180) {
+      throw new Error('La longitude doit être comprise entre -180 et 180');
+    }
+    
+    return true;
   }
 
   validate() {
     const errors = [];
 
-    if (!this.type || !Report.validateType(this.type)) {
-      errors.push('Type de signalement invalide');
+    try {
+      Report.validateType(this.type);
+    } catch (error) {
+      errors.push(error.message);
     }
 
-    if (!this.description || this.description.trim().length < 10) {
-      errors.push('Description trop courte (minimum 10 caractères)');
+    try {
+      Report.validateDescription(this.description);
+    } catch (error) {
+      errors.push(error.message);
     }
 
-    if (!Report.validateCoordinates(this.latitude, this.longitude)) {
-      errors.push('Coordonnées géographiques invalides');
+    try {
+      Report.validateCoordinates(this.latitude, this.longitude);
+    } catch (error) {
+      errors.push(error.message);
     }
 
-    // Amélioration de la validation de l'ID utilisateur
-    if (!this.user_id || typeof this.user_id !== 'string' || this.user_id.trim() === '') {
-      errors.push('ID utilisateur invalide ou manquant');
+    if (this.photo_url) {
+      try {
+        const url = new URL(this.photo_url);
+        if (!url.pathname.match(/\.(jpg|jpeg|png|webp)$/i)) {
+          errors.push('L\'URL de la photo doit pointer vers une image (jpg, jpeg, png, webp)');
+        }
+      } catch {
+        errors.push('L\'URL de la photo est invalide');
+      }
     }
 
-    if (this.photo_url && !this.validatePhotoUrl(this.photo_url)) {
-      errors.push('URL de photo invalide');
-    }
-
-    if (!Report.validateStatus(this.status)) {
-      errors.push('Statut invalide');
+    try {
+      if (this.status) {
+        Report.validateStatus(this.status);
+      }
+    } catch (error) {
+      errors.push(error.message);
     }
 
     return {

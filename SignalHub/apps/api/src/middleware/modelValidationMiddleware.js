@@ -2,11 +2,21 @@ import { Report, User } from '@repo/shared';
 
 export const validateReportData = (req, res, next) => {
   try {
-    const reportData = { ...req.body, user_id: req.user.id };
+    const reportData = {
+      ...req.body,
+      user_id: req.user.id,
+      status: req.body.status || 'new'
+    };
+    
     const report = new Report(reportData);
     const validation = report.validate();
 
     if (!validation.isValid) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Validation du modèle échouée',
+        errors: validation.errors
+      });
       return res.status(400).json({
         error: 'Données de signalement invalides',
         details: validation.errors
