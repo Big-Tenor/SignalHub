@@ -1,8 +1,15 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import mapboxgl from 'mapbox-gl'
+import 'mapbox-gl/dist/mapbox-gl.css'
 import useReportStore from '../context/reportStore'
 import { useGeolocation } from '../hooks/useGeolocation'
 import MainLayout from '../layouts/MainLayout'
+import { uploadImage } from '../utils/cloudinary'
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+const MAX_DESCRIPTION_LENGTH = 500
+const ACCEPTED_FILE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
 const reportTypes = [
   { id: 'road', name: 'Route endommagée' },
@@ -16,6 +23,8 @@ export default function ReportPage() {
   const navigate = useNavigate()
   const { location, error: geoError, loading: geoLoading, getCurrentPosition } = useGeolocation()
   const { createReport, loading } = useReportStore()
+  const mapContainer = useRef(null)
+  const map = useRef(null)
   
   const [type, setType] = useState('road')
   const [description, setDescription] = useState('')
@@ -23,15 +32,71 @@ export default function ReportPage() {
   const [error, setError] = useState(null)
   const [photoPreview, setPhotoPreview] = useState(null)
 
+  // Initialisation et mise à jour de la mini-carte
+  useEffect(() => {
+    if (location && mapContainer.current) {
+      if (!map.current) {
+        map.current = new mapboxgl.Map({
+          container: mapContainer.current,
+          style: 'mapbox://styles/mapbox/streets-v12',
+          center: [location.longitude, location.latitude],
+          zoom: 15,
+          interactive: false
+        })
+
+        new mapboxgl.Marker()
+          .setLngLat([location.longitude, location.latitude])
+          .addTo(map.current)
+      } else {
+        map.current.setCenter([location.longitude, location.latitude])
+        
+        // Mettre à jour le marqueur
+        const markers = document.getElementsByClassName('mapboxgl-marker')
+        if (markers[0]) markers[0].remove()
+        
+        new mapboxgl.Marker()
+          .setLngLat([location.longitude, location.latitude])
+          .addTo(map.current)
+      }
+    }
+
+    return () => {
+      if (map.current) {
+        map.current.remove()
+        map.current = null
+      }
+    }
+  }, [location])
+
   const handlePhotoChange = (e) => {
     const file = e.target.files[0]
-    if (file) {
-      setPhoto(file)
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setPhotoPreview(reader.result)
-      }
-      reader.readAsDataURL(file)
+    if (!file) return
+
+    // Validation du type de fichier
+    if (!ACCEPTED_FILE_TYPES.includes(file.type)) {
+      setError('Format de fichier non supporté. Utilisez JPG, PNG ou WebP.')
+      return
+    }
+
+    // Validation de la taille
+    if (file.size > MAX_FILE_SIZE) {
+      setError('La taille du fichier ne doit pas dépasser 5MB.')
+      return
+    }
+
+    setError(null)
+    setPhoto(file)
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setPhotoPreview(reader.result)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleDescriptionChange = (e) => {
+    const value = e.target.value
+    if (value.length <= MAX_DESCRIPTION_LENGTH) {
+      setDescription(value)
     }
   }
 
@@ -42,26 +107,25 @@ export default function ReportPage() {
       return
     }
 
+    if (!description.trim()) {
+      setError('Veuillez ajouter une description')
+      return
+    }
+
     setError(null)
     const formData = {
       type,
-      description,
+      description: description.trim(),
       latitude: location.latitude,
       longitude: location.longitude,
       status: 'new',
     }
 
     try {
-      // Si une photo est présente, d'abord l'uploader vers Supabase Storage
+      // Si une photo est présente, l'uploader vers Cloudinary
       if (photo) {
-        const { data: storageData, error: storageError } = await supabase.storage
-          .from('photos')
-          .upload(`reports/${Date.now()}-${photo.name}`, photo)
-
-        if (storageError) throw storageError
-
-        // Ajouter l'URL de la photo au formData
-        formData.photo_url = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/photos/${storageData.path}`
+        const { url } = await uploadImage(photo)
+        formData.photo_url = url
       }
 
       const { error } = await createReport(formData)
@@ -69,7 +133,7 @@ export default function ReportPage() {
 
       navigate('/')
     } catch (err) {
-      setError(err.message)
+      setError(err.message || "Une erreur s'est produite lors de l'envoi du signalement")
     }
   }
 
@@ -110,17 +174,23 @@ export default function ReportPage() {
             </label>
             <textarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={handleDescriptionChange}
               rows={4}
               className="mt-1 block w-full border-gray-300 dark:border-gray-600 dark:bg-gray-800 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
               placeholder="Décrivez le problème en détail..."
               required
             />
+            <div className="mt-1 text-sm text-gray-500 flex justify-end">
+              {description.length}/{MAX_DESCRIPTION_LENGTH} caractères
+            </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Photo
+              <span className="ml-1 text-sm text-gray-500">
+                (JPG, PNG ou WebP, max 5MB)
+              </span>
             </label>
             <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-md">
               <div className="space-y-1 text-center">
@@ -175,7 +245,7 @@ export default function ReportPage() {
                         <span>Télécharger une photo</span>
                         <input
                           type="file"
-                          accept="image/*"
+                          accept={ACCEPTED_FILE_TYPES.join(',')}
                           className="sr-only"
                           onChange={handlePhotoChange}
                         />
@@ -193,13 +263,26 @@ export default function ReportPage() {
             </label>
             <div className="mt-1">
               {location ? (
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  Latitude: {location.latitude.toFixed(6)}
-                  <br />
-                  Longitude: {location.longitude.toFixed(6)}
-                  <br />
-                  Précision: ±{Math.round(location.accuracy)}m
-                </div>
+                <>
+                  <div className="mb-2 text-sm text-gray-600 dark:text-gray-400">
+                    Latitude: {location.latitude.toFixed(6)}
+                    <br />
+                    Longitude: {location.longitude.toFixed(6)}
+                    <br />
+                    Précision: ±{Math.round(location.accuracy)}m
+                  </div>
+                  <div 
+                    ref={mapContainer} 
+                    className="h-48 rounded-lg overflow-hidden mb-2"
+                  />
+                  <button
+                    type="button"
+                    onClick={getCurrentPosition}
+                    className="text-sm text-primary-600 hover:text-primary-500"
+                  >
+                    Mettre à jour la position
+                  </button>
+                </>
               ) : (
                 <button
                   type="button"

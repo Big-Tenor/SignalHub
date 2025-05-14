@@ -5,7 +5,7 @@ import useReportStore from '../context/reportStore'
 import MainLayout from '../layouts/MainLayout'
 
 // Configuration de Mapbox
-mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN
+mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || pk.eyJ1IjoibWF0cml4aWEtZHJhbXVzIiwiYSI6ImNtOGFpZW12YzE4YnoybHM3cXBydHc4OGsifQ.WGPy8Zn3pGRKl5EIQSmFsA
 
 export default function HomePage() {
   const mapContainer = useRef(null)

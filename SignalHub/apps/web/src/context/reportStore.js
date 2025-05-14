@@ -1,5 +1,11 @@
 import { create } from 'zustand'
-import { supabase } from '../utils/supabase'
+import { supabase, getAccessToken } from '../utils/supabase'
+import { Report } from '@repo/shared'
+
+const API_URL = import.meta.env.VITE_API_URL;
+if (!API_URL) {
+  throw new Error('La variable d\'environnement VITE_API_URL n\'est pas définie');
+}
 
 const useReportStore = create((set, get) => ({
   reports: [],
@@ -10,13 +16,24 @@ const useReportStore = create((set, get) => ({
   fetchReports: async () => {
     set({ loading: true, error: null })
     try {
-      const { data, error } = await supabase
-        .from('reports')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const token = await getAccessToken();
+      const response = await fetch(`${API_URL}/reports`, {
+        credentials: 'same-origin',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        mode: 'cors'
+      });
       
-      if (error) throw error
-      set({ reports: data })
+      if (!response.ok) {
+        throw new Error('Erreur lors de la récupération des signalements');
+      }
+      
+      const data = await response.json();
+      // Conversion des données en instances de Report
+      const reports = data.map(reportData => Report.fromJSON(reportData));
+      set({ reports });
     } catch (error) {
       set({ error: error.message })
     } finally {
@@ -28,17 +45,45 @@ const useReportStore = create((set, get) => ({
   createReport: async (reportData) => {
     set({ loading: true, error: null })
     try {
-      const { data, error } = await supabase
-        .from('reports')
-        .insert(reportData)
-        .select()
-        .single()
+      // Récupérer l'utilisateur actuel depuis Supabase
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        throw new Error('Utilisateur non authentifié');
+      }
 
-      if (error) throw error
+      // Ajouter l'ID de l'utilisateur aux données du rapport
+      const completeReportData = {
+        ...reportData,
+        user_id: session.user.id
+      };
 
+      // Validation avec le modèle Report
+      const report = new Report(completeReportData);
+      const validation = report.validate();
+      if (!validation.isValid) {
+        throw new Error(validation.errors.join(', '));
+      }
+
+      const token = await getAccessToken();
+      const response = await fetch(`${API_URL}/reports`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        mode: 'cors',
+        body: JSON.stringify(report.toJSON())
+      });
+
+      if (!response.ok) {
+        throw new Error('Erreur lors de la création du signalement');
+      }
+
+      const data = await response.json();
       set((state) => ({
         reports: [data, ...state.reports],
-      }))
+      }));
 
       return { data, error: null }
     } catch (error) {
@@ -53,20 +98,26 @@ const useReportStore = create((set, get) => ({
   updateReport: async (id, updates) => {
     set({ loading: true, error: null })
     try {
-      const { data, error } = await supabase
-        .from('reports')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single()
+      const token = await getAccessToken();
+      const response = await fetch(`${API_URL}/reports/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updates)
+      });
 
-      if (error) throw error
+      if (!response.ok) {
+        throw new Error('Erreur lors de la mise à jour du signalement');
+      }
 
+      const data = await response.json();
       set((state) => ({
         reports: state.reports.map((report) =>
           report.id === id ? data : report
         ),
-      }))
+      }));
 
       return { data, error: null }
     } catch (error) {
@@ -81,16 +132,21 @@ const useReportStore = create((set, get) => ({
   deleteReport: async (id) => {
     set({ loading: true, error: null })
     try {
-      const { error } = await supabase
-        .from('reports')
-        .delete()
-        .eq('id', id)
+      const token = await getAccessToken();
+      const response = await fetch(`${API_URL}/reports/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
 
-      if (error) throw error
+      if (!response.ok) {
+        throw new Error('Erreur lors de la suppression du signalement');
+      }
 
       set((state) => ({
         reports: state.reports.filter((report) => report.id !== id),
-      }))
+      }));
 
       return { error: null }
     } catch (error) {
